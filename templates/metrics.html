@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Metrics - Juju{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Evaluation Metrics</h1>
+        <p class="text-gray-500 mt-1">Track quality trends and performance over time</p>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-white rounded-xl p-4 border border-gray-200">
+            <p class="text-sm text-gray-500">Total Messages</p>
+            <p class="text-2xl font-bold text-gray-900">{{ metrics.total_messages }}</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-200">
+            <p class="text-sm text-gray-500">Today</p>
+            <p class="text-2xl font-bold text-indigo-600">{{ metrics.messages_today }}</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-200">
+            <p class="text-sm text-gray-500">Avg Response</p>
+            <p class="text-2xl font-bold text-purple-600">{{ "%.0f"|format(metrics.avg_response_time_ms) }}ms</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-200">
+            <p class="text-sm text-gray-500">Faithfulness</p>
+            <p class="text-2xl font-bold {% if metrics.avg_faithfulness >= 0.8 %}text-green-600{% else %}text-yellow-600{% endif %}">{{ "%.2f"|format(metrics.avg_faithfulness) }}</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-200">
+            <p class="text-sm text-gray-500">Hallucination Rate</p>
+            <p class="text-2xl font-bold {% if metrics.hallucination_rate <= 5 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.1f"|format(metrics.hallucination_rate) }}%</p>
+        </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Messages Over Time -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="font-semibold text-gray-900 mb-4">Messages Over Time</h3>
+            <canvas id="messagesChart" height="200"></canvas>
+        </div>
+
+        <!-- Faithfulness Trend -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="font-semibold text-gray-900 mb-4">Faithfulness Score Trend</h3>
+            <canvas id="faithfulnessChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Charts Row 2 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Hallucination Rate -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="font-semibold text-gray-900 mb-4">Hallucination Rate Trend</h3>
+            <canvas id="hallucinationChart" height="200"></canvas>
+        </div>
+
+        <!-- Response Time -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="font-semibold text-gray-900 mb-4">Average Response Time</h3>
+            <canvas id="responseTimeChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Distribution Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Question Type -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="font-semibold text-gray-900 mb-4">Question Type Distribution</h3>
+            <canvas id="questionTypeChart" height="200"></canvas>
+        </div>
+
+        <!-- Complexity -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="font-semibold text-gray-900 mb-4">Question Complexity</h3>
+            <canvas id="complexityChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dailyData = {{ daily_data|safe }};
+const typeCounts = {{ type_counts|safe }};
+const complexityCounts = {{ complexity_counts|safe }};
+
+// Common chart options
+const lineOptions = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { display: false } },
+    scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' } }
+    }
+};
+
+// Messages Over Time
+if (dailyData.length > 0) {
+    new Chart(document.getElementById('messagesChart'), {
+        type: 'line',
+        data: {
+            labels: dailyData.map(d => d.date),
+            datasets: [{
+                label: 'Messages',
+                data: dailyData.map(d => d.message_count),
+                borderColor: '#4f46e5',
+                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: lineOptions
+    });
+
+    // Faithfulness Trend
+    new Chart(document.getElementById('faithfulnessChart'), {
+        type: 'line',
+        data: {
+            labels: dailyData.map(d => d.date),
+            datasets: [{
+                label: 'Faithfulness',
+                data: dailyData.map(d => d.avg_faithfulness),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            ...lineOptions,
+            scales: {
+                ...lineOptions.scales,
+                y: { ...lineOptions.scales.y, min: 0, max: 1 }
+            }
+        }
+    });
+
+    // Hallucination Rate
+    new Chart(document.getElementById('hallucinationChart'), {
+        type: 'line',
+        data: {
+            labels: dailyData.map(d => d.date),
+            datasets: [{
+                label: 'Hallucination Rate (%)',
+                data: dailyData.map(d => d.hallucination_rate),
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: lineOptions
+    });
+
+    // Response Time
+    new Chart(document.getElementById('responseTimeChart'), {
+        type: 'line',
+        data: {
+            labels: dailyData.map(d => d.date),
+            datasets: [{
+                label: 'Response Time (ms)',
+                data: dailyData.map(d => d.avg_response_time),
+                borderColor: '#8b5cf6',
+                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: lineOptions
+    });
+}
+
+// Question Type Pie Chart
+if (Object.keys(typeCounts).length > 0) {
+    new Chart(document.getElementById('questionTypeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(typeCounts),
+            datasets: [{
+                data: Object.values(typeCounts),
+                backgroundColor: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'right' } }
+        }
+    });
+}
+
+// Complexity Bar Chart
+if (Object.keys(complexityCounts).length > 0) {
+    const orderedComplexity = ['simple', 'moderate', 'complex'];
+    const complexityColors = { simple: '#10b981', moderate: '#f59e0b', complex: '#ef4444' };
+
+    new Chart(document.getElementById('complexityChart'), {
+        type: 'bar',
+        data: {
+            labels: orderedComplexity.filter(k => complexityCounts[k]),
+            datasets: [{
+                data: orderedComplexity.filter(k => complexityCounts[k]).map(k => complexityCounts[k]),
+                backgroundColor: orderedComplexity.filter(k => complexityCounts[k]).map(k => complexityColors[k])
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: '#f1f5f9' } }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
